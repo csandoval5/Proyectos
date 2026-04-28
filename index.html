@@ -13,7 +13,6 @@
 </head>
 <body>
     <div class="app">
-        <!-- Header Profesional -->
         <header class="main-header">
             <div class="header-content">
                 <div class="brand">
@@ -24,7 +23,6 @@
                         <h1>Taller de Motos</h1>
                         <span>Sistema de Inventario y Ventas</span>
                     </div>
-                </div>
                 <div class="header-actions">
                     <button id="btnExportarExcel" class="icon-btn" title="Exportar Excel">
                         <i class="fas fa-file-excel"></i>
@@ -35,14 +33,12 @@
                     <button id="btnExportar" class="icon-btn" title="Backup JSON">
                         <i class="fas fa-download"></i>
                     </button>
-                    <button id="btnConfig" class="icon-btn" title="Configuración">
+                    <button id="btnConfig" class="icon-btn" title="Configuracion">
                         <i class="fas fa-cog"></i>
                     </button>
                 </div>
-            </div>
         </header>
 
-        <!-- Stats Dashboard -->
         <section class="stats-bar">
             <div class="stat-item">
                 <div class="stat-icon blue">
@@ -52,7 +48,6 @@
                     <span class="stat-value" id="totalClientes">0</span>
                     <span class="stat-label">Clientes</span>
                 </div>
-            </div>
             <div class="stat-item">
                 <div class="stat-icon purple">
                     <i class="fas fa-boxes-stacked"></i>
@@ -61,7 +56,6 @@
                     <span class="stat-value" id="totalProductos">0</span>
                     <span class="stat-label">Productos</span>
                 </div>
-            </div>
             <div class="stat-item">
                 <div class="stat-icon green">
                     <i class="fas fa-cart-shopping"></i>
@@ -70,7 +64,6 @@
                     <span class="stat-value" id="totalVentas">0</span>
                     <span class="stat-label">Ventas</span>
                 </div>
-            </div>
             <div class="stat-item">
                 <div class="stat-icon orange">
                     <i class="fas fa-sack-dollar"></i>
@@ -79,10 +72,8 @@
                     <span class="stat-value" id="totalIngresos">$0</span>
                     <span class="stat-label">Ingresos</span>
                 </div>
-            </div>
         </section>
 
-        <!-- Search & Filter -->
         <section class="search-section">
             <div class="search-box">
                 <i class="fas fa-search"></i>
@@ -99,7 +90,6 @@
             </div>
         </section>
 
-        <!-- Tabs Navigation -->
         <nav class="tab-nav">
             <button class="tab-btn active" onclick="showTab('clientes')">
                 <i class="fas fa-users"></i>
@@ -122,9 +112,7 @@
             </button>
         </nav>
 
-        <!-- Main Content -->
         <main class="main-content">
-            <!-- CLIENTES -->
             <div id="clientes" class="tab-content active">
                 <div class="content-grid">
                     <div class="form-card">
@@ -136,21 +124,20 @@
                             <div class="form-grid">
                                 <div class="field-group">
                                     <label>Nombre completo *</label>
-                                    <input type="text" id="clienteNombre" placeholder="Ej: Juan Pérez" required>
+                                    <input type="text" id="clienteNombre" placeholder="Ej: Juan Perez" required>
                                 </div>
                                 <div class="field-group">
-                                    <label>Teléfono *</label>
+                                    <label>Telefono *</label>
                                     <input type="tel" id="clienteTelefono" placeholder="Ej: 300 123 4567" required>
                                 </div>
                                 <div class="field-group">
-                                    <label>Dirección</label>
+                                    <label>Direccion</label>
                                     <input type="text" id="clienteDireccion" placeholder="Ej: Calle 123 # 45-67">
                                 </div>
                                 <div class="field-group">
-                                    <label>Moto / Vehículo</label>
+                                    <label>Moto / Vehiculo</label>
                                     <input type="text" id="clienteMoto" placeholder="Ej: Yamaha MT-03">
                                 </div>
-                            </div>
                             <button type="submit" class="btn-submit">
                                 <i class="fas fa-save"></i> Guardar Cliente
                             </button>
@@ -162,11 +149,8 @@
                             <h2>Lista de Clientes <span class="count-badge" id="countClientes">0</span></h2>
                         </div>
                         <div id="listaClientes" class="table-wrapper"></div>
-                    </div>
                 </div>
-            </div>
 
-            <!-- PRODUCTOS -->
             <div id="productos" class="tab-content">
                 <div class="content-grid">
                     <div class="form-card">
@@ -186,16 +170,14 @@
                                         <span>$</span>
                                         <input type="number" id="productoPrecio" step="0.01" placeholder="0.00" required>
                                     </div>
-                                </div>
                                 <div class="field-group">
                                     <label>Cantidad en stock *</label>
                                     <input type="number" id="productoCantidad" placeholder="0" required>
                                 </div>
                                 <div class="field-group">
-                                    <label>Stock mínimo de alerta</label>
+                                    <label>Stock minimo de alerta</label>
                                     <input type="number" id="productoStockMin" value="5">
                                 </div>
-                            </div>
                             <button type="submit" id="btnSubmitProd" class="btn-submit">
                                 <i class="fas fa-save"></i> Guardar Producto
                             </button>
@@ -207,11 +189,8 @@
                             <h2>Inventario <span class="count-badge" id="countProductos">0</span></h2>
                         </div>
                         <div id="listaProductos" class="table-wrapper"></div>
-                    </div>
                 </div>
-            </div>
 
-            <!-- VENTAS -->
             <div id="ventas" class="tab-content">
                 <div class="content-grid">
                     <div class="form-card">
@@ -244,7 +223,6 @@
                                         <span>$</span>
                                         <input type="text" id="ventaTotal" readonly placeholder="0.00">
                                     </div>
-                                </div>
                             </div>
                             <button type="submit" class="btn-submit">
                                 <i class="fas fa-check-circle"></i> Confirmar Venta
@@ -257,11 +235,8 @@
                             <h2>Historial de Ventas <span class="count-badge" id="countVentas">0</span></h2>
                         </div>
                         <div id="listaVentas" class="table-wrapper"></div>
-                    </div>
                 </div>
-            </div>
 
-            <!-- REPORTES -->
             <div id="reportes" class="tab-content">
                 <div class="reports-grid">
                     <div class="report-card highlight">
@@ -273,7 +248,6 @@
                             <span class="report-number" id="ventasHoy">0</span>
                             <span class="report-sublabel" id="ingresosHoy">$0</span>
                         </div>
-                    </div>
                     <div class="report-card">
                         <div class="report-icon green">
                             <i class="fas fa-trophy"></i>
@@ -283,27 +257,24 @@
                             <span class="report-text" id="mejorCliente">N/A</span>
                             <span class="report-sublabel"><span id="ventasMejorCliente">0</span> compras</span>
                         </div>
-                    </div>
                     <div class="report-card">
                         <div class="report-icon purple">
                             <i class="fas fa-fire"></i>
                         </div>
                         <div class="report-data">
-                            <span class="report-label">Más Vendido</span>
+                            <span class="report-label">Mas Vendido</span>
                             <span class="report-text" id="productoMasVendido">N/A</span>
                             <span class="report-sublabel"><span id="unidadesVendidas">0</span> unidades</span>
                         </div>
-                    </div>
                     <div class="report-card alert">
                         <div class="report-icon red">
                             <i class="fas fa-triangle-exclamation"></i>
                         </div>
                         <div class="report-data">
-                            <span class="report-label">Stock Crítico</span>
+                            <span class="report-label">Stock Critico</span>
                             <span class="report-number red" id="stockCritico">0</span>
                             <span class="report-sublabel">productos agotados</span>
                         </div>
-                    </div>
                 </div>
                 <div class="chart-card">
                     <div class="card-header">
@@ -313,26 +284,22 @@
                     <div class="chart-wrapper">
                         <canvas id="graficoVentas"></canvas>
                     </div>
-                </div>
             </div>
         </main>
 
         <footer class="app-footer">
-            <span>© <span id="year"></span> Taller de Motos</span>
+            <span>2025 Taller de Motos</span>
             <span class="footer-sep">|</span>
-            <span>Sistema de Gestión Integral</span>
+            <span>Sistema de Gestion Integral</span>
         </footer>
     </div>
 
-    <!-- Hidden Inputs -->
     <input type="file" id="inputExcel" accept=".xlsx,.xls" style="display:none">
 
-    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <script src="script.js"></script>
-    <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>
-
