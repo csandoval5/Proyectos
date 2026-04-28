@@ -1,568 +1,181 @@
-// =================================================================
-// SISTEMA DE GESTIÓN PARA TALLER DE MOTOS - VERSIÓN EXTENDIDA
-// CONEXIÓN ILIMITADA VÍA GOOGLE APPS SCRIPT
-// =================================================================
+let clientes = [], productos = [], ventas = [], chartVentas = null;
+let clienteEditandoId = null, productoEditandoId = null;
+const URL_API = "https://script.google.com/macros/s/AKfycbzmo0l_GDbCF7gq5RNLIQ_lOO7sKz2A5H2s5BIHKuqA0mLeaO8e_Mmvktob317RsoAk/exec";
 
-/**
- * ESTADO GLOBAL: Variables que mantienen la información en la memoria 
- * del navegador mientras la aplicación está abierta.
- */
-let clientes = [];
-let productos = [];
-let ventas = [];
-let chartVentas = null;
-let clienteEditandoId = null;
-let productoEditandoId = null;
-
-// URL de la API (Google Apps Script Deploy)
-const URL_API = "https://script.google.com/macros/s/AKfycbwX5bZ62PeOk4Kfx1bdKxYtjjk3E9Cvp77RtetRbqmfQyj_L_j0x1hB3WHjg18XBqu4/exec";
-
-// =================================================================
-// 1. MÓDULO DE COMUNICACIÓN (API HELPERS)
-// =================================================================
-
-/**
- * Obtiene los registros de una pestaña específica de Google Sheets.
- */
-async function apiGet(tab) {
+async function apiGet(p) {
     try {
-        const respuesta = await fetch(`${URL_API}?pestaña=${tab}`);
-        if (!respuesta.ok) {
-            throw new Error(`Error en la petición: ${respuesta.statusText}`);
-        }
-        const datos = await respuesta.json();
-        return datos;
-    } catch (error) {
-        console.error(`Error al obtener datos de ${tab}:`, error);
-        return [];
-    }
+        const r = await fetch(`${URL_API}?pestaña=${p}`);
+        const d = await r.json();
+        return Array.isArray(d) ? d : [];
+    } catch (e) { console.error(e); return []; }
 }
 
-/**
- * Envía un nuevo registro a Google Sheets.
- * Nota: Google Apps Script siempre añade una fila al final (append).
- */
-async function apiPost(tab, fila) {
+async function apiPost(p, d) {
     try {
-        await fetch(URL_API, {
-            method: "POST",
-            mode: "no-cors", 
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                pestaña: tab,
-                datos: fila
-            })
-        });
+        await fetch(URL_API, { method: "POST", mode: "no-cors", body: JSON.stringify({ pestaña: p, datos: d }) });
         return true;
-    } catch (error) {
-        console.error(`Error al enviar datos a ${tab}:`, error);
-        return false;
-    }
+    } catch (e) { return false; }
 }
 
-// =================================================================
-// 2. LÓGICA DE INICIALIZACIÓN
-// =================================================================
-
-/**
- * Arranca la aplicación: carga datos, configura botones y dibuja tablas.
- */
 async function inicializarApp() {
-    console.log("Iniciando sistema de inventario...");
-    await cargarDatosDesdeNube();
-    vincularEventosInterfaz();
-    actualizarTodaLaInterfaz();
+    console.log("Iniciando...");
+    await sincronizarTodo();
+    configurarForms();
+    renderizarTodo();
 }
 
-/**
- * Sincroniza los arrays locales con la base de datos de Google.
- */
-async function cargarDatosDesdeNube() {
-    try {
-        const [rawClientes, rawProductos, rawVentas] = await Promise.all([
-            apiGet("Clientes"),
-            apiGet("Productos"),
-            apiGet("Ventas")
-        ]);
-
-        // Procesar y limpiar datos de Clientes
-        clientes = rawClientes.map(c => ({
-            id: Number(c.id) || Date.now(),
-            nombre: String(c.nombre || ""),
-            telefono: String(c.telefono || ""),
-            direccion: String(c.direccion || ""),
-            moto: String(c.moto || ""),
-            fecha: String(c.fecha || new Date().toLocaleDateString())
-        }));
-
-        // Procesar y limpiar datos de Productos
-        productos = rawProductos.map(p => ({
-            id: Number(p.id) || Date.now(),
-            nombre: String(p.nombre || ""),
-            precio: parseFloat(p.precio) || 0,
-            cantidad: parseInt(p.cantidad) || 0,
-            stockMin: parseInt(p.stockMin) || 5,
-            fecha: String(p.fecha || new Date().toLocaleDateString())
-        }));
-
-        // Procesar y limpiar datos de Ventas
-        ventas = rawVentas.map(v => ({
-            id: Number(v.id) || Date.now(),
-            cliente: String(v.cliente || ""),
-            producto: String(v.producto || ""),
-            cantidad: parseInt(v.cantidad) || 0,
-            total: parseFloat(v.total) || 0,
-            fecha: String(v.fecha || new Date().toLocaleDateString())
-        }));
-
-        respaldarEnLocalStorage();
-        console.log("Sincronización completada.");
-    } catch (err) {
-        console.warn("Fallo la conexión. Cargando datos locales.");
-        recuperarDeLocalStorage();
-    }
+async function sincronizarTodo() {
+    const [c, p, v] = await Promise.all([apiGet("Clientes"), apiGet("Productos"), apiGet("Ventas")]);
+    clientes = c.map(i => ({ id: Number(i.id), nombre: String(i.nombre || ""), telefono: String(i.telefono || ""), direccion: String(i.direccion || ""), moto: String(i.moto || ""), fecha: String(i.fecha || "") }));
+    productos = p.map(i => ({ id: Number(i.id), nombre: String(i.nombre || ""), precio: parseFloat(i.precio) || 0, cantidad: parseInt(i.cantidad) || 0, stockmin: parseInt(i.stockmin) || 5, fecha: String(i.fecha || "") }));
+    ventas = v.map(i => ({ id: Number(i.id), cliente: String(i.cliente || ""), producto: String(i.producto || ""), cantidad: parseInt(i.cantidad) || 0, total: parseFloat(i.total) || 0, fecha: String(i.fecha || "") }));
+    localStorage.setItem("motos_backup", JSON.stringify({clientes, productos, ventas}));
 }
 
-function respaldarEnLocalStorage() {
-    localStorage.setItem("clientes", JSON.stringify(clientes));
-    localStorage.setItem("productos", JSON.stringify(productos));
-    localStorage.setItem("ventas", JSON.stringify(ventas));
-}
-
-function recuperarDeLocalStorage() {
-    clientes = JSON.parse(localStorage.getItem("clientes")) || [];
-    productos = JSON.parse(localStorage.getItem("productos")) || [];
-    ventas = JSON.parse(localStorage.getItem("ventas")) || [];
-}
-
-// =================================================================
-// 3. MÓDULO DE CLIENTES
-// =================================================================
-
-function dibujarTablaClientes() {
-    const contenedor = document.getElementById("listaClientes");
-    if (!contenedor) return;
-    contenedor.innerHTML = "";
-
-    if (clientes.length === 0) {
-        contenedor.innerHTML = '<p class="vacio">No hay clientes en la base de datos.</p>';
-        return;
-    }
-
-    let tabla = `
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Nombre</th>
-                    <th>Teléfono</th>
-                    <th>Dirección</th>
-                    <th>Moto / Modelo</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
-    clientes.forEach(c => {
-        tabla += `
-            <tr>
-                <td>${c.nombre}</td>
-                <td>${c.telefono}</td>
-                <td>${c.direccion}</td>
-                <td>${c.moto}</td>
-                <td class="acciones">
-                    <button class="btn-edit" onclick="prepararEdicionCliente(${c.id})">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn-delete" onclick="eliminarClienteLocal(${c.id})">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </td>
-            </tr>
-        `;
+function renderizarProductos() {
+    const cont = document.getElementById("listaProductos");
+    if (!cont) return;
+    cont.innerHTML = "";
+    const unicos = [], ids = new Set();
+    productos.forEach(p => { if (!ids.has(p.id)) { ids.add(p.id); unicos.push(p); } });
+    let h = `<table class="data-table"><thead><tr><th>ID</th><th>Repuesto</th><th>Precio</th><th>Stock</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>`;
+    unicos.forEach(p => {
+        const crit = p.cantidad <= p.stockmin;
+        const cl = p.cantidad <= 0 ? 'status-critical' : (crit ? 'status-low' : 'status-ok');
+        h += `<tr><td>${p.id}</td><td>${p.nombre}</td><td>$${p.precio.toFixed(2)}</td><td>${p.cantidad}</td><td><span class="badge ${cl}">${p.cantidad <= 0 ? 'Agotado' : (crit ? 'Bajo' : 'OK')}</span></td><td><button onclick="editProd(${p.id})" class="btn-edit"><i class="fas fa-edit"></i></button></td></tr>`;
     });
-
-    tabla += "</tbody></table>";
-    contenedor.innerHTML = tabla;
+    cont.innerHTML = h + "</tbody></table>";
 }
 
-async function procesarFormularioCliente(event) {
-    event.preventDefault();
-    
-    const nombre = document.getElementById('clienteNombre').value.trim();
-    const telefono = document.getElementById('clienteTelefono').value.trim();
-    const direccion = document.getElementById('clienteDireccion').value.trim();
-    const moto = document.getElementById('clienteMoto').value.trim();
+async function saveProd(e) {
+    e.preventDefault();
+    const d = { id: productoEditandoId || Date.now(), nombre: document.getElementById('productoNombre').value.trim(), precio: parseFloat(document.getElementById('productoPrecio').value), cantidad: parseInt(document.getElementById('productoCantidad').value), stockmin: parseInt(document.getElementById('productoStockMin').value) || 5, fecha: new Date().toLocaleDateString() };
+    if (!d.nombre || isNaN(d.precio)) return Swal.fire("Error", "Completa los datos", "error");
+    await apiPost("Productos", d);
+    productoEditandoId = null;
+    document.getElementById('formProducto').reset();
+    document.getElementById('btnSubmitProd').innerHTML = '<i class="fas fa-save"></i> Guardar';
+    await sincronizarTodo();
+    renderizarTodo();
+    Swal.fire("Éxito", "Producto sincronizado", "success");
+}
 
-    if (!nombre || !telefono) {
-        Swal.fire("Atención", "Nombre y Teléfono son obligatorios", "warning");
-        return;
-    }
+function editProd(id) {
+    const p = productos.find(x => x.id === id);
+    if (!p) return;
+    productoEditandoId = id;
+    document.getElementById('productoNombre').value = p.nombre;
+    document.getElementById('productoPrecio').value = p.precio;
+    document.getElementById('productoCantidad').value = p.cantidad;
+    document.getElementById('productoStockMin').value = p.stockmin;
+    document.getElementById('btnSubmitProd').innerHTML = "Actualizar Producto";
+    window.scrollTo(0,0);
+}
 
-    const dataCliente = {
-        id: clienteEditandoId || Date.now(),
-        nombre: nombre,
-        telefono: telefono,
-        direccion: direccion,
-        moto: moto,
-        fecha: new Date().toLocaleDateString()
-    };
+function renderizarClientes() {
+    const cont = document.getElementById("listaClientes");
+    if (!cont) return;
+    cont.innerHTML = "";
+    let h = `<table class="data-table"><thead><tr><th>Cliente</th><th>Teléfono</th><th>Moto</th><th>Acciones</th></tr></thead><tbody>`;
+    clientes.forEach(c => { h += `<tr><td>${c.nombre}</td><td>${c.telefono}</td><td>${c.moto}</td><td><button onclick="editCli(${c.id})" class="btn-edit"><i class="fas fa-edit"></i></button></td></tr>`; });
+    cont.innerHTML = h + "</tbody></table>";
+}
 
-    if (clienteEditandoId) {
-        const indice = clientes.findIndex(c => c.id === clienteEditandoId);
-        if (indice !== -1) clientes[indice] = dataCliente;
-        clienteEditandoId = null;
-        document.getElementById('btnGuardarCliente').innerText = "Guardar Cliente";
-    } else {
-        clientes.push(dataCliente);
-    }
-
-    await apiPost("Clientes", dataCliente);
+async function saveCli(e) {
+    e.preventDefault();
+    const d = { id: clienteEditandoId || Date.now(), nombre: document.getElementById('clienteNombre').value, telefono: document.getElementById('clienteTelefono').value, direccion: document.getElementById('clienteDireccion').value, moto: document.getElementById('clienteMoto').value, fecha: new Date().toLocaleDateString() };
+    await apiPost("Clientes", d);
+    clienteEditandoId = null;
     document.getElementById('formCliente').reset();
-    actualizarTodaLaInterfaz();
-    Swal.fire("Éxito", "Cliente sincronizado", "success");
+    await sincronizarTodo();
+    renderizarTodo();
 }
 
-function prepararEdicionCliente(id) {
+function editCli(id) {
     const c = clientes.find(x => x.id === id);
     if (!c) return;
-
     clienteEditandoId = id;
     document.getElementById('clienteNombre').value = c.nombre;
     document.getElementById('clienteTelefono').value = c.telefono;
     document.getElementById('clienteDireccion').value = c.direccion;
     document.getElementById('clienteMoto').value = c.moto;
-    document.getElementById('btnGuardarCliente').innerText = "Actualizar Cliente";
-    
-    // Ir a la pestaña de clientes
-    cambiarPestana('clientes');
+    showTab('clientes');
 }
 
-// =================================================================
-// 4. MÓDULO DE INVENTARIO (PRODUCTOS)
-// =================================================================
-
-function dibujarTablaProductos() {
-    const contenedor = document.getElementById("listaProductos");
-    if (!contenedor) return;
-    contenedor.innerHTML = "";
-
-    let tabla = `
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Repuesto</th>
-                    <th>Precio</th>
-                    <th>Stock</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
-    productos.forEach(p => {
-        const stockBajo = p.cantidad <= p.stockMin;
-        const claseEstado = stockBajo ? 'status-low' : 'status-ok';
-        const textoEstado = stockBajo ? 'Bajo Stock' : 'Disponible';
-
-        tabla += `
-            <tr>
-                <td>${p.nombre}</td>
-                <td>$${p.precio.toFixed(2)}</td>
-                <td>${p.cantidad} unidades</td>
-                <td><span class="badge ${claseEstado}">${textoEstado}</span></td>
-                <td class="acciones">
-                    <button class="btn-edit" onclick="prepararEdicionProducto(${p.id})">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn-delete" onclick="eliminarProductoLocal(${p.id})">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </td>
-            </tr>
-        `;
-    });
-
-    tabla += "</tbody></table>";
-    contenedor.innerHTML = tabla;
-}
-
-async function procesarFormularioProducto(event) {
-    event.preventDefault();
-    
-    const nombre = document.getElementById('productoNombre').value.trim();
-    const precio = parseFloat(document.getElementById('productoPrecio').value);
-    const cantidad = parseInt(document.getElementById('productoCantidad').value);
-    const min = parseInt(document.getElementById('productoStockMin').value) || 5;
-
-    if (!nombre || isNaN(precio) || isNaN(cantidad)) {
-        Swal.fire("Error", "Verifica los datos del producto", "error");
-        return;
-    }
-
-    const dataProducto = {
-        id: productoEditandoId || Date.now(),
-        nombre: nombre,
-        precio: precio,
-        cantidad: cantidad,
-        stockMin: min,
-        fecha: new Date().toLocaleDateString()
-    };
-
-    if (productoEditandoId) {
-        const idx = productos.findIndex(p => p.id === productoEditandoId);
-        if (idx !== -1) productos[idx] = dataProducto;
-        productoEditandoId = null;
-        document.getElementById('btnGuardarProducto').innerText = "Guardar Producto";
-    } else {
-        productos.push(dataProducto);
-    }
-
-    await apiPost("Productos", dataProducto);
-    document.getElementById('formProducto').reset();
-    actualizarTodaLaInterfaz();
-    Swal.fire("Sincronizado", "Inventario actualizado en Google", "success");
-}
-
-function prepararEdicionProducto(id) {
-    const p = productos.find(x => x.id === id);
-    if (!p) return;
-
-    productoEditandoId = id;
-    document.getElementById('productoNombre').value = p.nombre;
-    document.getElementById('productoPrecio').value = p.precio;
-    document.getElementById('productoCantidad').value = p.cantidad;
-    document.getElementById('productoStockMin').value = p.stockMin;
-    document.getElementById('btnGuardarProducto').innerText = "Actualizar Producto";
-}
-
-// =================================================================
-// 5. MÓDULO DE VENTAS Y CAJA
-// =================================================================
-
-async function registrarNuevaVenta(event) {
-    event.preventDefault();
-
-    const cId = parseInt(document.getElementById('ventaCliente').value);
-    const pId = parseInt(document.getElementById('ventaProducto').value);
-    const cant = parseInt(document.getElementById('ventaCantidad').value);
-
-    const cliente = clientes.find(c => c.id === cId);
-    const producto = productos.find(p => p.id === pId);
-
-    if (!cliente || !producto || isNaN(cant) || cant < 1) {
-        Swal.fire("Error", "Selecciona cliente, producto y cantidad", "warning");
-        return;
-    }
-
-    if (producto.cantidad < cant) {
-        Swal.fire("Sin Stock", `Solo quedan ${producto.cantidad} unidades`, "error");
-        return;
-    }
-
-    const totalVenta = cant * producto.precio;
-    const nuevaVenta = {
-        id: Date.now(),
-        cliente: cliente.nombre,
-        producto: producto.nombre,
-        cantidad: cant,
-        total: totalVenta,
-        fecha: new Date().toLocaleDateString()
-    };
-
-    // Actualización local
-    ventas.push(nuevaVenta);
-    producto.cantidad -= cant;
-
-    // Enviar a la nube (Venta y el Producto actualizado)
-    await apiPost("Ventas", nuevaVenta);
-    await apiPost("Productos", producto); 
-
+async function regVenta(e) {
+    e.preventDefault();
+    const cId = document.getElementById('ventaCliente').value, pId = document.getElementById('ventaProducto').value, cant = parseInt(document.getElementById('ventaCantidad').value);
+    const cli = clientes.find(c => c.id == cId), prod = productos.find(p => p.id == pId);
+    if (!cli || !prod || cant > prod.cantidad) return Swal.fire("Error", "Stock insuficiente", "error");
+    const v = { id: Date.now(), cliente: cli.nombre, producto: prod.nombre, cantidad: cant, total: cant * prod.precio, fecha: new Date().toLocaleDateString() };
+    prod.cantidad -= cant;
+    await apiPost("Ventas", v);
+    await apiPost("Productos", prod);
+    await sincronizarTodo();
+    renderizarTodo();
     document.getElementById('formVenta').reset();
-    document.getElementById('ventaTotalDisplay').innerText = "$0.00";
-    
-    actualizarTodaLaInterfaz();
-    Swal.fire("Venta Registrada", `Total: $${totalVenta.toFixed(2)}`, "success");
+    Swal.fire("Venta!", "Éxito", "success");
 }
 
-function dibujarTablaVentas() {
-    const contenedor = document.getElementById("listaVentas");
-    if (!contenedor) return;
-
-    let html = `
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Fecha</th>
-                    <th>Cliente</th>
-                    <th>Repuesto</th>
-                    <th>Cant.</th>
-                    <th>Total</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
-    // Mostrar últimas ventas primero
-    [...ventas].reverse().forEach(v => {
-        html += `
-            <tr>
-                <td>${v.fecha}</td>
-                <td>${v.cliente}</td>
-                <td>${v.producto}</td>
-                <td>${v.cantidad}</td>
-                <td>$${v.total.toFixed(2)}</td>
-            </tr>
-        `;
-    });
-
-    html += "</tbody></table>";
-    contenedor.innerHTML = html;
+function renderizarVentas() {
+    const cont = document.getElementById("listaVentas");
+    if (!cont) return;
+    let h = `<table class="data-table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Total</th></tr></thead><tbody>`;
+    [...ventas].reverse().forEach(v => { h += `<tr><td>${v.fecha}</td><td>${v.cliente}</td><td>${v.producto}</td><td>$${v.total.toFixed(2)}</td></tr>`; });
+    cont.innerHTML = h + "</tbody></table>";
 }
 
-// =================================================================
-// 6. DASHBOARD Y UI HELPERS
-// =================================================================
-
-function actualizarResumenDashboard() {
-    const ingresosTotales = ventas.reduce((suma, v) => suma + v.total, 0);
-    const stockCritico = productos.filter(p => p.cantidad <= p.stockMin).length;
-
-    if(document.getElementById("dashIngresos")) {
-        document.getElementById("dashIngresos").innerText = `$${ingresosTotales.toFixed(2)}`;
-    }
-    if(document.getElementById("dashVentasCount")) {
-        document.getElementById("dashVentasCount").innerText = ventas.length;
-    }
-    if(document.getElementById("dashStockAlerta")) {
-        document.getElementById("dashStockAlerta").innerText = stockCritico;
-    }
-
-    dibujarGraficoVentas();
+function actualizarDash() {
+    const total = ventas.reduce((acc, v) => acc + v.total, 0);
+    const bajos = productos.filter(p => p.cantidad <= p.stockmin).length;
+    if(document.getElementById("dashTotal")) document.getElementById("dashTotal").innerText = `$${total.toFixed(2)}`;
+    if(document.getElementById("dashVentas")) document.getElementById("dashVentas").innerText = ventas.length;
+    if(document.getElementById("dashAlertas")) document.getElementById("dashAlertas").innerText = bajos;
+    dibujarGraf();
 }
 
-function dibujarGraficoVentas() {
-    const ctx = document.getElementById('canvasGraficoVentas')?.getContext('2d');
-    if (!ctx) return;
-
-    const datosPorFecha = {};
-    ventas.forEach(v => {
-        datosPorFecha[v.fecha] = (datosPorFecha[v.fecha] || 0) + v.total;
-    });
-
-    const etiquetas = Object.keys(datosPorFecha);
-    const valores = Object.values(datosPorFecha);
-
+function dibujarGraf() {
+    const canvas = document.getElementById('graficoVentas');
+    if (!canvas || !ventas.length) return;
+    const ctx = canvas.getContext('2d');
+    const datos = {};
+    ventas.forEach(v => { datos[v.fecha] = (datos[v.fecha] || 0) + v.total; });
     if (chartVentas) chartVentas.destroy();
+    chartVentas = new Chart(ctx, { type: 'line', data: { labels: Object.keys(datos), datasets: [{ label: 'Ventas $', data: Object.values(datos), borderColor: '#3498db', tension: 0.3 }] } });
+}
 
-    chartVentas = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: etiquetas,
-            datasets: [{
-                label: 'Ingresos Diarios ($)',
-                data: valores,
-                borderColor: '#3498db',
-                backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                fill: true,
-                tension: 0.3
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false
-        }
+function configurarForms() {
+    document.getElementById("formProducto")?.addEventListener("submit", saveProd);
+    document.getElementById("formCliente")?.addEventListener("submit", saveCli);
+    document.getElementById("formVenta")?.addEventListener("submit", regVenta);
+    document.getElementById("ventaProducto")?.addEventListener("change", calcTotal);
+    document.getElementById("ventaCantidad")?.addEventListener("input", calcTotal);
+    document.getElementById("buscador")?.addEventListener("input", (e) => {
+        const q = e.target.value.toLowerCase();
+        document.querySelectorAll(".data-table tbody tr").forEach(r => { r.style.display = r.innerText.toLowerCase().includes(q) ? "" : "none"; });
     });
 }
 
-function cargarSelectsVenta() {
-    const selCliente = document.getElementById("ventaCliente");
-    const selProducto = document.getElementById("ventaProducto");
-
-    if (selCliente) {
-        selCliente.innerHTML = '<option value="">-- Seleccionar Cliente --</option>' +
-            clientes.map(c => `<option value="${c.id}">${c.nombre} (${c.moto})</option>`).join('');
-    }
-
-    if (selProducto) {
-        selProducto.innerHTML = '<option value="">-- Seleccionar Producto --</option>' +
-            productos.map(p => `<option value="${p.id}">${p.nombre} - $${p.precio}</option>`).join('');
-    }
+function calcTotal() {
+    const p = productos.find(x => x.id == document.getElementById('ventaProducto').value);
+    const c = document.getElementById('ventaCantidad').value || 0;
+    if (p) document.getElementById('ventaTotalDisplay').innerText = `$${(p.precio * c).toFixed(2)}`;
 }
 
-function calcularTotalDinamico() {
-    const pId = parseInt(document.getElementById('ventaProducto').value);
-    const cant = parseInt(document.getElementById('ventaCantidad').value) || 0;
-    const p = productos.find(x => x.id === pId);
-    
-    if (p) {
-        const total = cant * p.precio;
-        document.getElementById('ventaTotalDisplay').innerText = `$${total.toFixed(2)}`;
-    }
+function renderizarTodo() {
+    renderizarProductos();
+    renderizarClientes();
+    renderizarVentas();
+    actualizarDash();
+    const sc = document.getElementById("ventaCliente"), sp = document.getElementById("ventaProducto");
+    if(sc) sc.innerHTML = '<option value="">Cliente</option>' + clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+    if(sp) sp.innerHTML = '<option value="">Producto</option>' + productos.map(p => `<option value="${p.id}">${p.nombre} (${p.cantidad})</option>`).join('');
 }
 
-// =================================================================
-// 7. EVENTOS Y CONTROLADORES
-// =================================================================
-
-function vincularEventosInterfaz() {
-    // Formulario Clientes
-    const fCliente = document.getElementById("formCliente");
-    if (fCliente) fCliente.addEventListener("submit", procesarFormularioCliente);
-
-    // Formulario Productos
-    const fProducto = document.getElementById("formProducto");
-    if (fProducto) fProducto.addEventListener("submit", procesarFormularioProducto);
-
-    // Formulario Ventas
-    const fVenta = document.getElementById("formVenta");
-    if (fVenta) fVenta.addEventListener("submit", registrarNuevaVenta);
-
-    // Cálculos automáticos en venta
-    const vProd = document.getElementById("ventaProducto");
-    if (vProd) vProd.addEventListener("change", calcularTotalDinamico);
-    
-    const vCant = document.getElementById("ventaCantidad");
-    if (vCant) vCant.addEventListener("input", calcularTotalDinamico);
-
-    // Buscador Global
-    const buscar = document.getElementById("inputBuscador");
-    if (buscar) buscar.addEventListener("input", ejecutarBusqueda);
+function showTab(t) {
+    document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+    document.getElementById(t)?.classList.add('active');
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.getAttribute('onclick').includes(t)));
 }
 
-function ejecutarBusqueda() {
-    const query = document.getElementById("inputBuscador").value.toLowerCase();
-    const filas = document.querySelectorAll(".data-table tbody tr");
-
-    filas.forEach(fila => {
-        const texto = fila.innerText.toLowerCase();
-        fila.style.display = texto.includes(query) ? "" : "none";
-    });
-}
-
-function cambiarPestana(id) {
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    
-    const target = document.getElementById(id);
-    if (target) target.classList.add('active');
-    
-    // Marcar botón activo
-    const btn = document.querySelector(`[onclick="cambiarPestana('${id}')"]`);
-    if (btn) btn.classList.add('active');
-}
-
-function actualizarTodaLaInterfaz() {
-    dibujarTablaClientes();
-    dibujarTablaProductos();
-    dibujarTablaVentas();
-    cargarSelectsVenta();
-    actualizarResumenDashboard();
-    respaldarEnLocalStorage();
-}
-
-// INICIO AUTOMÁTICO
 document.addEventListener('DOMContentLoaded', inicializarApp);
