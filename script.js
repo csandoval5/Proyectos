@@ -1,18 +1,13 @@
 // =================================================================
-// CONFIGURACION SUPABASE
+// CONFIGURACION SUPABASE (Cliente oficial @supabase/supabase-js)
 // =================================================================
 const SUPABASE_URL = 'https://cdvmqzhqjskknfntomtx.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_wWPwhAUH6NZFYx0j5t1mSA_OebPJgoX';
 
-const sbHeaders = {
-    'apikey': SUPABASE_KEY,
-    'Authorization': 'Bearer ' + SUPABASE_KEY,
-    'Content-Type': 'application/json',
-    'Prefer': 'return=minimal'
-};
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // =================================================================
-// ESTADO LOCAL (localStorage como fuente principal)
+// ESTADO EN MEMORIA (sin localStorage)
 // =================================================================
 let clientes = [];
 let productos = [];
@@ -21,69 +16,29 @@ let chartVentas = null;
 let clienteEditandoId = null;
 let productoEditandoId = null;
 
-function cargarLocal() {
-    try {
-        clientes = JSON.parse(localStorage.getItem('tm_clientes') || '[]');
-        productos = JSON.parse(localStorage.getItem('tm_productos') || '[]');
-        ventas = JSON.parse(localStorage.getItem('tm_ventas') || '[]');
-    } catch (e) {
-        clientes = []; productos = []; ventas = [];
-    }
-}
-
-function guardarLocal() {
-    localStorage.setItem('tm_clientes', JSON.stringify(clientes));
-    localStorage.setItem('tm_productos', JSON.stringify(productos));
-    localStorage.setItem('tm_ventas', JSON.stringify(ventas));
-}
-
 // =================================================================
-// SUPABASE HELPERS (no bloqueantes)
+// CARGA DE DATOS DESDE SUPABASE
 // =================================================================
-async function sbGet(tabla) {
+async function cargarDatos() {
     try {
-        const res = await fetch(`${SUPABASE_URL}/${tabla}?select=*`, { headers: sbHeaders });
-        if (!res.ok) throw new Error(await res.text());
-        return await res.json();
-    } catch (e) { console.warn('Supabase GET error:', e); return null; }
-}
+        const [prodRes, cliRes, ventRes] = await Promise.all([
+            supabaseClient.from('productos').select('*'),
+            supabaseClient.from('clientes').select('*'),
+            supabaseClient.from('ventas').select('*')
+        ]);
 
-async function sbPost(tabla, data) {
-    try {
-        const res = await fetch(`${SUPABASE_URL}/${tabla}`, { method: 'POST', headers: sbHeaders, body: JSON.stringify(data) });
-        if (!res.ok) throw new Error(await res.text());
-        return true;
-    } catch (e) { console.warn('Supabase POST error:', e); return false; }
-}
+        if (prodRes.error) throw prodRes.error;
+        if (cliRes.error) throw cliRes.error;
+        if (ventRes.error) throw ventRes.error;
 
-async function sbPatch(tabla, id, data) {
-    try {
-        const res = await fetch(`${SUPABASE_URL}/${tabla}?id=eq.${id}`, { method: 'PATCH', headers: sbHeaders, body: JSON.stringify(data) });
-        if (!res.ok) throw new Error(await res.text());
-        return true;
-    } catch (e) { console.warn('Supabase PATCH error:', e); return false; }
-}
+        productos = prodRes.data || [];
+        clientes = cliRes.data || [];
+        ventas = ventRes.data || [];
 
-async function sbDelete(tabla, id) {
-    try {
-        const res = await fetch(`${SUPABASE_URL}/${tabla}?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders });
-        if (!res.ok) throw new Error(await res.text());
-        return true;
-    } catch (e) { console.warn('Supabase DELETE error:', e); return false; }
-}
-
-// Sincronizacion en segundo plano (no bloquea UI)
-async function sincronizarConSupabase() {
-    console.log('Sincronizando con Supabase...');
-    const [c, p, v] = await Promise.all([sbGet('clientes'), sbGet('productos'), sbGet('ventas')]);
-    let cambios = false;
-    if (c && c.length > 0) { clientes = c; cambios = true; }
-    if (p && p.length > 0) { productos = p; cambios = true; }
-    if (v && v.length > 0) { ventas = v; cambios = true; }
-    if (cambios) {
-        guardarLocal();
         actualizarVistaCompleta();
-        console.log('Datos sincronizados desde Supabase');
+    } catch (err) {
+        console.error('Error cargando datos:', err);
+        Swal.fire('Error', 'No se pudieron cargar los datos: ' + err.message, 'error');
     }
 }
 
@@ -91,11 +46,8 @@ async function sincronizarConSupabase() {
 // INICIALIZACION
 // =================================================================
 function inicializarApp() {
-    cargarLocal();
     vincularEventosUI();
-    actualizarVistaCompleta();
-    // Intentar sincronizar con Supabase en segundo plano
-    sincronizarConSupabase().catch(e => console.warn('Fallo sincronizacion inicial:', e));
+    cargarDatos();
 }
 
 function esc(t) {
@@ -115,7 +67,7 @@ function renderizarProductos() {
     let html = '<table class="data-table"><thead><tr><th>ID</th><th>Repuesto</th><th>Precio</th><th>Stock</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>';
     productos.forEach(p => {
         const cant = parseInt(p.cantidad) || 0;
-        const min = parseInt(p.stockmin) || 5;
+        const min = parseInt(p.stock_min) || 5;
         const bajo = cant <= min;
         const clase = cant <= 0 ? 'status-critical' : (bajo ? 'status-low' : 'status-ok');
         const estado = cant <= 0 ? 'Agotado' : (bajo ? 'Bajo' : 'OK');
@@ -136,34 +88,50 @@ function renderizarProductos() {
 
 async function guardarProducto(e) {
     e.preventDefault();
-    const id = productoEditandoId || Date.now();
-    const data = {
-        id: id,
-        nombre: document.getElementById('productoNombre').value.trim(),
-        precio: parseFloat(document.getElementById('productoPrecio').value),
-        cantidad: parseInt(document.getElementById('productoCantidad').value),
-        stockmin: parseInt(document.getElementById('productoStockMin').value) || 5,
-        fecha: new Date().toLocaleDateString()
-    };
 
-    if (!data.nombre || isNaN(data.precio) || isNaN(data.cantidad)) {
+    const nombre = document.getElementById('productoNombre').value.trim();
+    const precio = parseFloat(document.getElementById('productoPrecio').value);
+    const cantidad = parseInt(document.getElementById('productoCantidad').value);
+    const stock_min = parseInt(document.getElementById('productoStockMin').value) || 5;
+
+    if (!nombre || isNaN(precio) || isNaN(cantidad)) {
         return Swal.fire('Error', 'Datos incompletos o invalidos', 'error');
     }
 
-    const idx = productos.findIndex(p => p.id == id);
-    if (idx >= 0) productos[idx] = data; else productos.push(data);
-    guardarLocal();
+    // NO enviamos id ni fecha; Supabase los genera automaticamente
+    const payload = { nombre, precio, cantidad, stock_min };
 
-    // Sync a Supabase en segundo plano
-    const existeEnSupabase = await sbGet('productos').then(list => (list || []).some(p => p.id == id));
-    if (existeEnSupabase) sbPatch('productos', id, data); else sbPost('productos', data);
+    try {
+        let res;
 
-    productoEditandoId = null;
-    document.getElementById('formProducto').reset();
-    const btn = document.getElementById('btnSubmitProd');
-    if (btn) btn.innerText = 'Guardar Producto';
-    actualizarVistaCompleta();
-    Swal.fire('Exito', 'Producto guardado', 'success');
+        if (productoEditandoId) {
+            // Actualizar producto existente
+            res = await supabaseClient
+                .from('productos')
+                .update(payload)
+                .eq('id', productoEditandoId)
+                .select();
+        } else {
+            // Insertar nuevo producto
+            res = await supabaseClient
+                .from('productos')
+                .insert([payload])
+                .select();
+        }
+
+        if (res.error) throw res.error;
+
+        productoEditandoId = null;
+        document.getElementById('formProducto').reset();
+        const btn = document.getElementById('btnSubmitProd');
+        if (btn) btn.innerText = 'Guardar Producto';
+
+        await cargarDatos();
+        Swal.fire('Exito', 'Producto guardado correctamente', 'success');
+    } catch (err) {
+        console.error('Error guardando producto:', err);
+        Swal.fire('Error', 'No se pudo guardar el producto: ' + err.message, 'error');
+    }
 }
 
 async function eliminarProducto(id) {
@@ -177,11 +145,20 @@ async function eliminarProducto(id) {
     });
     if (!c.isConfirmed) return;
 
-    productos = productos.filter(p => p.id != id);
-    guardarLocal();
-    sbDelete('productos', id);
-    actualizarVistaCompleta();
-    Swal.fire('Eliminado', 'Producto eliminado', 'success');
+    try {
+        const { error } = await supabaseClient
+            .from('productos')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+
+        await cargarDatos();
+        Swal.fire('Eliminado', 'Producto eliminado', 'success');
+    } catch (err) {
+        console.error('Error eliminando producto:', err);
+        Swal.fire('Error', 'No se pudo eliminar el producto: ' + err.message, 'error');
+    }
 }
 
 function prepararEdicionProducto(id) {
@@ -191,7 +168,7 @@ function prepararEdicionProducto(id) {
     document.getElementById('productoNombre').value = p.nombre || '';
     document.getElementById('productoPrecio').value = p.precio || '';
     document.getElementById('productoCantidad').value = p.cantidad || '';
-    document.getElementById('productoStockMin').value = p.stockmin || 5;
+    document.getElementById('productoStockMin').value = p.stock_min || 5;
     const btn = document.getElementById('btnSubmitProd');
     if (btn) btn.innerText = 'Actualizar Producto';
     showTab('productos');
@@ -231,27 +208,31 @@ async function guardarCliente(e) {
     const telefono = document.getElementById('clienteTelefono').value.trim();
     if (!nombre || !telefono) return Swal.fire('Error', 'Nombre y telefono obligatorios', 'error');
 
-    const id = clienteEditandoId || Date.now();
-    const data = {
-        id: id,
+    const payload = {
         nombre: nombre,
         telefono: telefono,
         direccion: document.getElementById('clienteDireccion').value || '',
-        moto: document.getElementById('clienteMoto').value || '',
-        fecha: new Date().toLocaleDateString()
+        moto: document.getElementById('clienteMoto').value || ''
     };
 
-    const idx = clientes.findIndex(c => c.id == id);
-    if (idx >= 0) clientes[idx] = data; else clientes.push(data);
-    guardarLocal();
+    try {
+        let res;
+        if (clienteEditandoId) {
+            res = await supabaseClient.from('clientes').update(payload).eq('id', clienteEditandoId).select();
+        } else {
+            res = await supabaseClient.from('clientes').insert([payload]).select();
+        }
 
-    const existeEnSupabase = await sbGet('clientes').then(list => (list || []).some(c => c.id == id));
-    if (existeEnSupabase) sbPatch('clientes', id, data); else sbPost('clientes', data);
+        if (res.error) throw res.error;
 
-    clienteEditandoId = null;
-    document.getElementById('formCliente').reset();
-    actualizarVistaCompleta();
-    Swal.fire('Exito', 'Cliente guardado', 'success');
+        clienteEditandoId = null;
+        document.getElementById('formCliente').reset();
+        await cargarDatos();
+        Swal.fire('Exito', 'Cliente guardado correctamente', 'success');
+    } catch (err) {
+        console.error('Error guardando cliente:', err);
+        Swal.fire('Error', 'No se pudo guardar el cliente: ' + err.message, 'error');
+    }
 }
 
 async function eliminarCliente(id) {
@@ -265,11 +246,15 @@ async function eliminarCliente(id) {
     });
     if (!c.isConfirmed) return;
 
-    clientes = clientes.filter(x => x.id != id);
-    guardarLocal();
-    sbDelete('clientes', id);
-    actualizarVistaCompleta();
-    Swal.fire('Eliminado', 'Cliente eliminado', 'success');
+    try {
+        const { error } = await supabaseClient.from('clientes').delete().eq('id', id);
+        if (error) throw error;
+        await cargarDatos();
+        Swal.fire('Eliminado', 'Cliente eliminado', 'success');
+    } catch (err) {
+        console.error('Error eliminando cliente:', err);
+        Swal.fire('Error', 'No se pudo eliminar el cliente: ' + err.message, 'error');
+    }
 }
 
 function prepararEdicionCliente(id) {
@@ -335,32 +320,35 @@ async function registrarVenta(e) {
     });
     if (!confirmacion.isConfirmed) return;
 
-    // Descontar stock
-    prod.cantidad = stockActual - cant;
-    const idxProd = productos.findIndex(p => p.id == pId);
-    if (idxProd >= 0) productos[idxProd] = prod;
+    const nuevoStock = stockActual - cant;
 
-    const id = Date.now();
-    const data = {
-        id: id,
-        cliente: cli.nombre,
-        producto: prod.nombre,
-        cantidad: cant,
-        total: cant * parseFloat(prod.precio || 0),
-        fecha: new Date().toLocaleDateString()
-    };
+    try {
+        // 1. Registrar la venta (sin id ni fecha)
+        const { error: errVenta } = await supabaseClient.from('ventas').insert([{
+            cliente: cli.nombre,
+            producto: prod.nombre,
+            cantidad: cant,
+            total: cant * parseFloat(prod.precio || 0)
+        }]);
+        if (errVenta) throw errVenta;
 
-    ventas.push(data);
-    guardarLocal();
+        // 2. Descontar stock del producto
+        const { error: errStock } = await supabaseClient
+            .from('productos')
+            .update({ cantidad: nuevoStock })
+            .eq('id', pId);
+        if (errStock) throw errStock;
 
-    sbPost('ventas', data);
-    sbPatch('productos', pId, prod);
+        document.getElementById('formVenta').reset();
+        if (document.getElementById('ventaTotal')) document.getElementById('ventaTotal').value = '';
+        if (document.getElementById('precioProducto')) document.getElementById('precioProducto').innerText = '';
 
-    document.getElementById('formVenta').reset();
-    if (document.getElementById('ventaTotal')) document.getElementById('ventaTotal').value = '';
-    if (document.getElementById('precioProducto')) document.getElementById('precioProducto').innerText = '';
-    actualizarVistaCompleta();
-    Swal.fire('Exito', 'Venta registrada', 'success');
+        await cargarDatos();
+        Swal.fire('Exito', 'Venta registrada correctamente', 'success');
+    } catch (err) {
+        console.error('Error registrando venta:', err);
+        Swal.fire('Error', 'No se pudo registrar la venta: ' + err.message, 'error');
+    }
 }
 
 async function eliminarVenta(id) {
@@ -375,20 +363,30 @@ async function eliminarVenta(id) {
     if (!c.isConfirmed) return;
 
     const v = ventas.find(x => x.id == id);
-    if (v) {
-        const prod = productos.find(p => p.nombre === v.producto);
-        if (prod) {
-            prod.cantidad = (parseInt(prod.cantidad) || 0) + (parseInt(v.cantidad) || 0);
-            guardarLocal();
-            sbPatch('productos', prod.id, prod);
-        }
-    }
 
-    ventas = ventas.filter(x => x.id != id);
-    guardarLocal();
-    sbDelete('ventas', id);
-    actualizarVistaCompleta();
-    Swal.fire('Eliminado', 'Venta eliminada', 'success');
+    try {
+        // Si hay producto asociado, devolver stock
+        if (v) {
+            const prod = productos.find(p => p.nombre === v.producto);
+            if (prod) {
+                const nuevoStock = (parseInt(prod.cantidad) || 0) + (parseInt(v.cantidad) || 0);
+                const { error: errStock } = await supabaseClient
+                    .from('productos')
+                    .update({ cantidad: nuevoStock })
+                    .eq('id', prod.id);
+                if (errStock) throw errStock;
+            }
+        }
+
+        const { error } = await supabaseClient.from('ventas').delete().eq('id', id);
+        if (error) throw error;
+
+        await cargarDatos();
+        Swal.fire('Eliminado', 'Venta eliminada', 'success');
+    } catch (err) {
+        console.error('Error eliminando venta:', err);
+        Swal.fire('Error', 'No se pudo eliminar la venta: ' + err.message, 'error');
+    }
 }
 
 // =================================================================
@@ -397,7 +395,7 @@ async function eliminarVenta(id) {
 
 function actualizarDashboard() {
     const totalVentas = ventas.reduce((acc, v) => acc + (parseFloat(v.total) || 0), 0);
-    const bajoStock = productos.filter(p => (p.cantidad || 0) <= (p.stockmin || 5)).length;
+    const bajoStock = productos.filter(p => (p.cantidad || 0) <= (p.stock_min || 5)).length;
 
     const el = id => document.getElementById(id);
     if (el('dashIngresos')) el('dashIngresos').innerText = '$' + totalVentas.toFixed(2);
@@ -570,29 +568,46 @@ function importarExcel(e) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (evt) => {
-        const data = new Uint8Array(evt.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
+        try {
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
 
-        const sheetClientes = workbook.Sheets['Clientes'];
-        const sheetProductos = workbook.Sheets['Productos'];
-        const sheetVentas = workbook.Sheets['Ventas'];
+            const sheetClientes = workbook.Sheets['Clientes'];
+            const sheetProductos = workbook.Sheets['Productos'];
+            const sheetVentas = workbook.Sheets['Ventas'];
 
-        if (sheetClientes) {
-            const datos = XLSX.utils.sheet_to_json(sheetClientes);
-            for (const d of datos) await sbPost('clientes', d);
-        }
-        if (sheetProductos) {
-            const datos = XLSX.utils.sheet_to_json(sheetProductos);
-            for (const d of datos) await sbPost('productos', d);
-        }
-        if (sheetVentas) {
-            const datos = XLSX.utils.sheet_to_json(sheetVentas);
-            for (const d of datos) await sbPost('ventas', d);
-        }
+            if (sheetClientes) {
+                const datos = XLSX.utils.sheet_to_json(sheetClientes);
+                for (const d of datos) {
+                    delete d.id; delete d.fecha;
+                    const { error } = await supabaseClient.from('clientes').insert([d]);
+                    if (error) throw error;
+                }
+            }
+            if (sheetProductos) {
+                const datos = XLSX.utils.sheet_to_json(sheetProductos);
+                for (const d of datos) {
+                    delete d.id; delete d.fecha;
+                    if (d.stockmin !== undefined) { d.stock_min = d.stockmin; delete d.stockmin; }
+                    const { error } = await supabaseClient.from('productos').insert([d]);
+                    if (error) throw error;
+                }
+            }
+            if (sheetVentas) {
+                const datos = XLSX.utils.sheet_to_json(sheetVentas);
+                for (const d of datos) {
+                    delete d.id; delete d.fecha;
+                    const { error } = await supabaseClient.from('ventas').insert([d]);
+                    if (error) throw error;
+                }
+            }
 
-        await sincronizarConSupabase();
-        actualizarVistaCompleta();
-        Swal.fire('Importado', 'Datos importados desde Excel', 'success');
+            await cargarDatos();
+            Swal.fire('Importado', 'Datos importados desde Excel', 'success');
+        } catch (err) {
+            console.error('Error importando Excel:', err);
+            Swal.fire('Error', 'No se pudieron importar los datos: ' + err.message, 'error');
+        }
         e.target.value = '';
     };
     reader.readAsArrayBuffer(file);
@@ -613,17 +628,13 @@ async function mostrarConfiguracion() {
     const { value: accion } = await Swal.fire({
         title: 'Configuracion',
         input: 'select',
-        inputOptions: { '': 'Seleccione', 'limpiar': 'Limpiar datos locales', 'url': 'Ver URL Supabase' },
+        inputOptions: { '': 'Seleccione', 'url': 'Ver URL Supabase' },
         showCancelButton: true
     });
-    if (accion === 'limpiar') {
-        const c = await Swal.fire({ title: 'Esta seguro?', text: 'Solo limpia datos locales', icon: 'warning', showCancelButton: true, confirmButtonText: 'Si, limpiar' });
-        if (c.isConfirmed) { clientes = []; productos = []; ventas = []; actualizarVistaCompleta(); Swal.fire('Limpiado', 'Datos locales eliminados', 'info'); }
-    } else if (accion === 'url') {
+    if (accion === 'url') {
         Swal.fire('URL Supabase', SUPABASE_URL, 'info');
     }
 }
 
 // INICIO
 document.addEventListener('DOMContentLoaded', inicializarApp);
-
