@@ -245,7 +245,8 @@ async function guardarCliente(e) {
     if (idx >= 0) clientes[idx] = data; else clientes.push(data);
     guardarLocal();
 
-    sbPost('clientes', data);
+    const existeEnSupabase = await sbGet('clientes').then(list => (list || []).some(c => c.id == id));
+    if (existeEnSupabase) sbPatch('clientes', id, data); else sbPost('clientes', data);
 
     clienteEditandoId = null;
     document.getElementById('formCliente').reset();
@@ -324,45 +325,68 @@ async function registrarVenta(e) {
     const stockActual = parseInt(prod.cantidad) || 0;
     if (cant > stockActual) return Swal.fire('Atencion', 'Stock insuficiente: ' + stockActual, 'warning');
 
-    // 1. Preparamos el objeto con los datos que irán a Supabase
-// No incluimos 'id' ni 'fecha' porque ya los configuraste como automáticos en la base de datos
-const datosVenta = {
-    cliente: cli.nombre,
-    producto: prod.nombre,
-    cantidad: cant,
-    total: cant * parseFloat(prod.precio || 0)
-};
-// 2. Lanzamos la alerta de confirmación con SweetAlert
-const confirmacion = await Swal.fire({
-    title: '¿Confirmar venta?',
-    text: `Vender ${cant} de ${prod.nombre} a ${cli.nombre}`,
-    icon: 'question',
-    showCancelButton: true,
-    confirmButtonText: 'Sí, vender',
-    cancelButtonText: 'Cancelar'
-});
+    const confirmacion = await Swal.fire({
+        title: 'Confirmar venta?',
+        text: `Vender ${cant} de ${prod.nombre} a ${cli.nombre}`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Si, vender',
+        cancelButtonText: 'Cancelar'
+    });
+    if (!confirmacion.isConfirmed) return;
 
-// 3. Si el usuario hace clic en "Cancelar", detenemos la función
-if (!confirmacion.isConfirmed) return;
+    // Descontar stock
+    prod.cantidad = stockActual - cant;
+    const idxProd = productos.findIndex(p => p.id == pId);
+    if (idxProd >= 0) productos[idxProd] = prod;
 
-// 4. Si confirmó, procedemos a guardar en Supabase
-const { data, error } = await supabase
-    .from('ventas')
-    .insert([datosVenta]);
+    const id = Date.now();
+    const data = {
+        id: id,
+        cliente: cli.nombre,
+        producto: prod.nombre,
+        cantidad: cant,
+        total: cant * parseFloat(prod.precio || 0),
+        fecha: new Date().toLocaleDateString()
+    };
 
-if (error) {
-    console.error("Error al registrar venta:", error.message);
-    Swal.fire('Error', 'No se pudo registrar la venta: ' + error.message, 'error');
-} else {
-    Swal.fire('¡Vendido!', 'La venta se registró correctamente', 'success');
-    // Aquí puedes llamar a tus funciones para refrescar el stock o las tablas
-    if (typeof cargarDatos === 'function') await cargarDatos();
+    ventas.push(data);
+    guardarLocal();
+
+    sbPost('ventas', data);
+    sbPatch('productos', pId, prod);
+
+    document.getElementById('formVenta').reset();
+    if (document.getElementById('ventaTotal')) document.getElementById('ventaTotal').value = '';
+    if (document.getElementById('precioProducto')) document.getElementById('precioProducto').innerText = '';
+    actualizarVistaCompleta();
+    Swal.fire('Exito', 'Venta registrada', 'success');
 }
 
-    const ok = await sbDelete('ventas', id);
-    if (!ok) return Swal.fire('Error', 'No se pudo eliminar', 'error');
+async function eliminarVenta(id) {
+    const c = await Swal.fire({
+        title: 'Eliminar venta?',
+        text: 'No se puede deshacer',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Si, eliminar',
+        cancelButtonText: 'Cancelar'
+    });
+    if (!c.isConfirmed) return;
 
-    await sincronizarTodo();
+    const v = ventas.find(x => x.id == id);
+    if (v) {
+        const prod = productos.find(p => p.nombre === v.producto);
+        if (prod) {
+            prod.cantidad = (parseInt(prod.cantidad) || 0) + (parseInt(v.cantidad) || 0);
+            guardarLocal();
+            sbPatch('productos', prod.id, prod);
+        }
+    }
+
+    ventas = ventas.filter(x => x.id != id);
+    guardarLocal();
+    sbDelete('ventas', id);
     actualizarVistaCompleta();
     Swal.fire('Eliminado', 'Venta eliminada', 'success');
 }
@@ -566,7 +590,7 @@ function importarExcel(e) {
             for (const d of datos) await sbPost('ventas', d);
         }
 
-        await sincronizarTodo();
+        await sincronizarConSupabase();
         actualizarVistaCompleta();
         Swal.fire('Importado', 'Datos importados desde Excel', 'success');
         e.target.value = '';
