@@ -17,6 +17,53 @@ let clienteEditandoId = null;
 let productoEditandoId = null;
 
 // =================================================================
+// SUPABASE HELPERS (wrappers sobre el cliente oficial)
+// =================================================================
+async function sbGet(tabla) {
+    try {
+        const { data, error } = await supabaseClient.from(tabla).select('*');
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.warn(`sbGet error (${tabla}):`, err);
+        return null;
+    }
+}
+
+async function sbPost(tabla, data) {
+    try {
+        const { data: result, error } = await supabaseClient.from(tabla).insert([data]).select();
+        if (error) throw error;
+        return result;
+    } catch (err) {
+        console.warn(`sbPost error (${tabla}):`, err);
+        return null;
+    }
+}
+
+async function sbPatch(tabla, id, data) {
+    try {
+        const { data: result, error } = await supabaseClient.from(tabla).update(data).eq('id', id).select();
+        if (error) throw error;
+        return result;
+    } catch (err) {
+        console.warn(`sbPatch error (${tabla}):`, err);
+        return null;
+    }
+}
+
+async function sbDelete(tabla, id) {
+    try {
+        const { error } = await supabaseClient.from(tabla).delete().eq('id', id);
+        if (error) throw error;
+        return true;
+    } catch (err) {
+        console.warn(`sbDelete error (${tabla}):`, err);
+        return false;
+    }
+}
+
+// =================================================================
 // CARGA DE DATOS DESDE SUPABASE
 // =================================================================
 async function cargarDatos() {
@@ -106,20 +153,13 @@ async function guardarProducto(e) {
 
         if (productoEditandoId) {
             // Actualizar producto existente
-            res = await supabaseClient
-                .from('productos')
-                .update(payload)
-                .eq('id', productoEditandoId)
-                .select();
+            res = await sbPatch('productos', productoEditandoId, payload);
         } else {
             // Insertar nuevo producto
-            res = await supabaseClient
-                .from('productos')
-                .insert([payload])
-                .select();
+            res = await sbPost('productos', payload);
         }
 
-        if (res.error) throw res.error;
+        if (!res) throw new Error('No se pudo guardar en Supabase');
 
         productoEditandoId = null;
         document.getElementById('formProducto').reset();
@@ -146,12 +186,8 @@ async function eliminarProducto(id) {
     if (!c.isConfirmed) return;
 
     try {
-        const { error } = await supabaseClient
-            .from('productos')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
+        const ok = await sbDelete('productos', id);
+        if (!ok) throw new Error('No se pudo eliminar en Supabase');
 
         await cargarDatos();
         Swal.fire('Eliminado', 'Producto eliminado', 'success');
@@ -218,12 +254,12 @@ async function guardarCliente(e) {
     try {
         let res;
         if (clienteEditandoId) {
-            res = await supabaseClient.from('clientes').update(payload).eq('id', clienteEditandoId).select();
+            res = await sbPatch('clientes', clienteEditandoId, payload);
         } else {
-            res = await supabaseClient.from('clientes').insert([payload]).select();
+            res = await sbPost('clientes', payload);
         }
 
-        if (res.error) throw res.error;
+        if (!res) throw new Error('No se pudo guardar en Supabase');
 
         clienteEditandoId = null;
         document.getElementById('formCliente').reset();
@@ -247,8 +283,8 @@ async function eliminarCliente(id) {
     if (!c.isConfirmed) return;
 
     try {
-        const { error } = await supabaseClient.from('clientes').delete().eq('id', id);
-        if (error) throw error;
+        const ok = await sbDelete('clientes', id);
+        if (!ok) throw new Error('No se pudo eliminar en Supabase');
         await cargarDatos();
         Swal.fire('Eliminado', 'Cliente eliminado', 'success');
     } catch (err) {
@@ -324,20 +360,17 @@ async function registrarVenta(e) {
 
     try {
         // 1. Registrar la venta (sin id ni fecha)
-        const { error: errVenta } = await supabaseClient.from('ventas').insert([{
+        const resVenta = await sbPost('ventas', {
             cliente: cli.nombre,
             producto: prod.nombre,
             cantidad: cant,
             total: cant * parseFloat(prod.precio || 0)
-        }]);
-        if (errVenta) throw errVenta;
+        });
+        if (!resVenta) throw new Error('No se pudo registrar la venta en Supabase');
 
         // 2. Descontar stock del producto
-        const { error: errStock } = await supabaseClient
-            .from('productos')
-            .update({ cantidad: nuevoStock })
-            .eq('id', pId);
-        if (errStock) throw errStock;
+        const resStock = await sbPatch('productos', pId, { cantidad: nuevoStock });
+        if (!resStock) throw new Error('No se pudo actualizar el stock');
 
         document.getElementById('formVenta').reset();
         if (document.getElementById('ventaTotal')) document.getElementById('ventaTotal').value = '';
@@ -370,16 +403,13 @@ async function eliminarVenta(id) {
             const prod = productos.find(p => p.nombre === v.producto);
             if (prod) {
                 const nuevoStock = (parseInt(prod.cantidad) || 0) + (parseInt(v.cantidad) || 0);
-                const { error: errStock } = await supabaseClient
-                    .from('productos')
-                    .update({ cantidad: nuevoStock })
-                    .eq('id', prod.id);
-                if (errStock) throw errStock;
+                const resStock = await sbPatch('productos', prod.id, { cantidad: nuevoStock });
+                if (!resStock) throw new Error('No se pudo restaurar el stock');
             }
         }
 
-        const { error } = await supabaseClient.from('ventas').delete().eq('id', id);
-        if (error) throw error;
+        const ok = await sbDelete('ventas', id);
+        if (!ok) throw new Error('No se pudo eliminar la venta');
 
         await cargarDatos();
         Swal.fire('Eliminado', 'Venta eliminada', 'success');
@@ -580,8 +610,8 @@ function importarExcel(e) {
                 const datos = XLSX.utils.sheet_to_json(sheetClientes);
                 for (const d of datos) {
                     delete d.id; delete d.fecha;
-                    const { error } = await supabaseClient.from('clientes').insert([d]);
-                    if (error) throw error;
+                    const res = await sbPost('clientes', d);
+                    if (!res) throw new Error('Fallo al importar cliente');
                 }
             }
             if (sheetProductos) {
@@ -589,16 +619,16 @@ function importarExcel(e) {
                 for (const d of datos) {
                     delete d.id; delete d.fecha;
                     if (d.stockmin !== undefined) { d.stock_min = d.stockmin; delete d.stockmin; }
-                    const { error } = await supabaseClient.from('productos').insert([d]);
-                    if (error) throw error;
+                    const res = await sbPost('productos', d);
+                    if (!res) throw new Error('Fallo al importar producto');
                 }
             }
             if (sheetVentas) {
                 const datos = XLSX.utils.sheet_to_json(sheetVentas);
                 for (const d of datos) {
                     delete d.id; delete d.fecha;
-                    const { error } = await supabaseClient.from('ventas').insert([d]);
-                    if (error) throw error;
+                    const res = await sbPost('ventas', d);
+                    if (!res) throw new Error('Fallo al importar venta');
                 }
             }
 
