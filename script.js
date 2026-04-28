@@ -324,18 +324,40 @@ async function registrarVenta(e) {
     const stockActual = parseInt(prod.cantidad) || 0;
     if (cant > stockActual) return Swal.fire('Atencion', 'Stock insuficiente: ' + stockActual, 'warning');
 
-    const venta = {
-        id: Date.now(),
-        cliente: cli.nombre,
-        producto: prod.nombre,
-        cantidad: cant,
-        total: cant * parseFloat(prod.precio || 0),
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Si, eliminar',
-        cancelButtonText: 'Cancelar'
-    });
-    if (!c.isConfirmed) return;
+    // 1. Preparamos el objeto con los datos que irán a Supabase
+// No incluimos 'id' ni 'fecha' porque ya los configuraste como automáticos en la base de datos
+const datosVenta = {
+    cliente: cli.nombre,
+    producto: prod.nombre,
+    cantidad: cant,
+    total: cant * parseFloat(prod.precio || 0)
+};
+// 2. Lanzamos la alerta de confirmación con SweetAlert
+const confirmacion = await Swal.fire({
+    title: '¿Confirmar venta?',
+    text: `Vender ${cant} de ${prod.nombre} a ${cli.nombre}`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, vender',
+    cancelButtonText: 'Cancelar'
+});
+
+// 3. Si el usuario hace clic en "Cancelar", detenemos la función
+if (!confirmacion.isConfirmed) return;
+
+// 4. Si confirmó, procedemos a guardar en Supabase
+const { data, error } = await supabase
+    .from('ventas')
+    .insert([datosVenta]);
+
+if (error) {
+    console.error("Error al registrar venta:", error.message);
+    Swal.fire('Error', 'No se pudo registrar la venta: ' + error.message, 'error');
+} else {
+    Swal.fire('¡Vendido!', 'La venta se registró correctamente', 'success');
+    // Aquí puedes llamar a tus funciones para refrescar el stock o las tablas
+    if (typeof cargarDatos === 'function') await cargarDatos();
+}
 
     const ok = await sbDelete('ventas', id);
     if (!ok) return Swal.fire('Error', 'No se pudo eliminar', 'error');
