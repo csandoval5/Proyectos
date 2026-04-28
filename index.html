@@ -16,63 +16,45 @@
         <header class="main-header">
             <div class="header-content">
                 <div class="brand">
-                    <div class="brand-icon">
-                        <i class="fas fa-motorcycle"></i>
-                    </div>
+                    <div class="brand-icon"><i class="fas fa-motorcycle"></i></div>
                     <div class="brand-text">
                         <h1>Taller de Motos</h1>
                         <span>Sistema de Inventario y Ventas</span>
                     </div>
-                <div class="header-actions">
-                    <button id="btnExportarExcel" class="icon-btn" title="Exportar Excel">
-                        <i class="fas fa-file-excel"></i>
-                    </button>
-                    <button id="btnImportarExcel" class="icon-btn" title="Importar Excel">
-                        <i class="fas fa-file-import"></i>
-                    </button>
-                    <button id="btnExportar" class="icon-btn" title="Backup JSON">
-                        <i class="fas fa-download"></i>
-                    </button>
-                    <button id="btnConfig" class="icon-btn" title="Configuracion">
-                        <i class="fas fa-cog"></i>
-                    </button>
+                </div> <div class="header-actions">
+                    <button id="btnExportarExcel" class="icon-btn" title="Exportar Excel"><i class="fas fa-file-excel"></i></button>
+                    <button id="btnImportarExcel" class="icon-btn" title="Importar Excel"><i class="fas fa-file-import"></i></button>
+                    <button id="btnExportar" class="icon-btn" title="Backup JSON"><i class="fas fa-download"></i></button>
+                    <button id="btnConfig" class="icon-btn" title="Configuracion"><i class="fas fa-cog"></i></button>
                 </div>
-        </header>
+            </div> </header>
 
         <section class="stats-bar">
             <div class="stat-item">
-                <div class="stat-icon blue">
-                    <i class="fas fa-users"></i>
-                </div>
+                <div class="stat-icon blue"><i class="fas fa-users"></i></div>
                 <div class="stat-info">
                     <span class="stat-value" id="totalClientes">0</span>
                     <span class="stat-label">Clientes</span>
                 </div>
-            <div class="stat-item">
-                <div class="stat-icon purple">
-                    <i class="fas fa-boxes-stacked"></i>
-                </div>
+            </div> <div class="stat-item">
+                <div class="stat-icon purple"><i class="fas fa-boxes-stacked"></i></div>
                 <div class="stat-info">
                     <span class="stat-value" id="totalProductos">0</span>
                     <span class="stat-label">Productos</span>
                 </div>
-            <div class="stat-item">
-                <div class="stat-icon green">
-                    <i class="fas fa-cart-shopping"></i>
-                </div>
+            </div> <div class="stat-item">
+                <div class="stat-icon green"><i class="fas fa-cart-shopping"></i></div>
                 <div class="stat-info">
                     <span class="stat-value" id="totalVentas">0</span>
                     <span class="stat-label">Ventas</span>
                 </div>
-            <div class="stat-item">
-                <div class="stat-icon orange">
-                    <i class="fas fa-sack-dollar"></i>
-                </div>
+            </div> <div class="stat-item">
+                <div class="stat-icon orange"><i class="fas fa-sack-dollar"></i></div>
                 <div class="stat-info">
                     <span class="stat-value" id="totalIngresos">$0</span>
                     <span class="stat-label">Ingresos</span>
                 </div>
-        </section>
+            </div> </section>
 
         <section class="search-section">
             <div class="search-box">
@@ -138,6 +120,7 @@
                                     <label>Moto / Vehiculo</label>
                                     <input type="text" id="clienteMoto" placeholder="Ej: Yamaha MT-03">
                                 </div>
+                            </div>
                             <button type="submit" class="btn-submit">
                                 <i class="fas fa-save"></i> Guardar Cliente
                             </button>
@@ -149,7 +132,9 @@
                             <h2>Lista de Clientes <span class="count-badge" id="countClientes">0</span></h2>
                         </div>
                         <div id="listaClientes" class="table-wrapper"></div>
+                    </div>
                 </div>
+            </div>
 
             <div id="productos" class="tab-content">
                 <div class="content-grid">
@@ -162,22 +147,24 @@
                             <div class="form-grid">
                                 <div class="field-group">
                                     <label>Nombre del repuesto *</label>
-                                    <input type="text" id="productoNombre" placeholder="Ej: Aceite 10W40" required>
+                                    <input type="text" id="productoNombre" required>
                                 </div>
                                 <div class="field-group">
                                     <label>Precio de venta *</label>
                                     <div class="input-prefix">
                                         <span>$</span>
-                                        <input type="number" id="productoPrecio" step="0.01" placeholder="0.00" required>
+                                        <input type="number" id="productoPrecio" step="0.01" required>
                                     </div>
+                                </div>
                                 <div class="field-group">
                                     <label>Cantidad en stock *</label>
-                                    <input type="number" id="productoCantidad" placeholder="0" required>
+                                    <input type="number" id="productoCantidad" required>
                                 </div>
                                 <div class="field-group">
-                                    <label>Stock minimo de alerta</label>
+                                    <label>Stock minimo</label>
                                     <input type="number" id="productoStockMin" value="5">
                                 </div>
+                            </div>
                             <button type="submit" id="btnSubmitProd" class="btn-submit">
                                 <i class="fas fa-save"></i> Guardar Producto
                             </button>
@@ -189,7 +176,9 @@
                             <h2>Inventario <span class="count-badge" id="countProductos">0</span></h2>
                         </div>
                         <div id="listaProductos" class="table-wrapper"></div>
+                    </div>
                 </div>
+            </div>
 
             <div id="ventas" class="tab-content">
                 <div class="content-grid">
@@ -215,14 +204,15 @@
                                 </div>
                                 <div class="field-group">
                                     <label>Cantidad *</label>
-                                    <input type="number" id="ventaCantidad" min="1" placeholder="1" required>
+                                    <input type="number" id="ventaCantidad" min="1" required>
                                 </div>
                                 <div class="field-group">
                                     <label>Total a pagar</label>
                                     <div class="input-prefix readonly">
                                         <span>$</span>
-                                        <input type="text" id="ventaTotal" readonly placeholder="0.00">
+                                        <input type="text" id="ventaTotal" readonly>
                                     </div>
+                                </div>
                             </div>
                             <button type="submit" class="btn-submit">
                                 <i class="fas fa-check-circle"></i> Confirmar Venta
@@ -235,46 +225,43 @@
                             <h2>Historial de Ventas <span class="count-badge" id="countVentas">0</span></h2>
                         </div>
                         <div id="listaVentas" class="table-wrapper"></div>
+                    </div>
                 </div>
+            </div>
 
             <div id="reportes" class="tab-content">
                 <div class="reports-grid">
                     <div class="report-card highlight">
-                        <div class="report-icon blue">
-                            <i class="fas fa-calendar-day"></i>
-                        </div>
+                        <div class="report-icon blue"><i class="fas fa-calendar-day"></i></div>
                         <div class="report-data">
                             <span class="report-label">Ventas Hoy</span>
                             <span class="report-number" id="ventasHoy">0</span>
                             <span class="report-sublabel" id="ingresosHoy">$0</span>
                         </div>
+                    </div>
                     <div class="report-card">
-                        <div class="report-icon green">
-                            <i class="fas fa-trophy"></i>
-                        </div>
+                        <div class="report-icon green"><i class="fas fa-trophy"></i></div>
                         <div class="report-data">
                             <span class="report-label">Mejor Cliente</span>
                             <span class="report-text" id="mejorCliente">N/A</span>
                             <span class="report-sublabel"><span id="ventasMejorCliente">0</span> compras</span>
                         </div>
+                    </div>
                     <div class="report-card">
-                        <div class="report-icon purple">
-                            <i class="fas fa-fire"></i>
-                        </div>
+                        <div class="report-icon purple"><i class="fas fa-fire"></i></div>
                         <div class="report-data">
                             <span class="report-label">Mas Vendido</span>
                             <span class="report-text" id="productoMasVendido">N/A</span>
                             <span class="report-sublabel"><span id="unidadesVendidas">0</span> unidades</span>
                         </div>
+                    </div>
                     <div class="report-card alert">
-                        <div class="report-icon red">
-                            <i class="fas fa-triangle-exclamation"></i>
-                        </div>
+                        <div class="report-icon red"><i class="fas fa-triangle-exclamation"></i></div>
                         <div class="report-data">
                             <span class="report-label">Stock Critico</span>
                             <span class="report-number red" id="stockCritico">0</span>
-                            <span class="report-sublabel">productos agotados</span>
                         </div>
+                    </div>
                 </div>
                 <div class="chart-card">
                     <div class="card-header">
@@ -284,13 +271,12 @@
                     <div class="chart-wrapper">
                         <canvas id="graficoVentas"></canvas>
                     </div>
+                </div>
             </div>
         </main>
 
         <footer class="app-footer">
-            <span>2026 Taller de Motos</span>
-            <span class="footer-sep">|</span>
-            <span>Sistema de Gestion Integral</span>
+            <span>2026 Taller de Motos | Sistema de Gestión Integral</span>
         </footer>
     </div>
 
