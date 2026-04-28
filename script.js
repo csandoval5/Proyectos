@@ -1,16 +1,19 @@
 // =================================================================
-// SUPABASE REST API CONFIG
+// CONFIGURACION SUPABASE
 // =================================================================
-const SUPABASE_URL = 'https://cdvmqzhqjskknfntomtx.supabase.co/rest/v1';
+const SUPABASE_URL = 'https://cdvmqzhqjskknfntomtx.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_wWPwhAUH6NZFYx0j5t1mSA_OebPJgoX';
 
-const headers = {
+const sbHeaders = {
     'apikey': SUPABASE_KEY,
     'Authorization': 'Bearer ' + SUPABASE_KEY,
     'Content-Type': 'application/json',
     'Prefer': 'return=minimal'
 };
 
+// =================================================================
+// ESTADO LOCAL (localStorage como fuente principal)
+// =================================================================
 let clientes = [];
 let productos = [];
 let ventas = [];
@@ -18,79 +21,81 @@ let chartVentas = null;
 let clienteEditandoId = null;
 let productoEditandoId = null;
 
-// Helpers API
+function cargarLocal() {
+    try {
+        clientes = JSON.parse(localStorage.getItem('tm_clientes') || '[]');
+        productos = JSON.parse(localStorage.getItem('tm_productos') || '[]');
+        ventas = JSON.parse(localStorage.getItem('tm_ventas') || '[]');
+    } catch (e) {
+        clientes = []; productos = []; ventas = [];
+    }
+}
+
+function guardarLocal() {
+    localStorage.setItem('tm_clientes', JSON.stringify(clientes));
+    localStorage.setItem('tm_productos', JSON.stringify(productos));
+    localStorage.setItem('tm_ventas', JSON.stringify(ventas));
+}
+
+// =================================================================
+// SUPABASE HELPERS (no bloqueantes)
+// =================================================================
 async function sbGet(tabla) {
     try {
-        const res = await fetch(`${SUPABASE_URL}/${tabla}?select=*`, { headers });
+        const res = await fetch(`${SUPABASE_URL}/${tabla}?select=*`, { headers: sbHeaders });
         if (!res.ok) throw new Error(await res.text());
         return await res.json();
-    } catch (e) {
-        console.error('Error GET ' + tabla + ':', e);
-        return [];
-    }
+    } catch (e) { console.warn('Supabase GET error:', e); return null; }
 }
 
 async function sbPost(tabla, data) {
     try {
-        const res = await fetch(`${SUPABASE_URL}/${tabla}`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(data)
-        });
+        const res = await fetch(`${SUPABASE_URL}/${tabla}`, { method: 'POST', headers: sbHeaders, body: JSON.stringify(data) });
         if (!res.ok) throw new Error(await res.text());
         return true;
-    } catch (e) {
-        console.error('Error POST ' + tabla + ':', e);
-        return false;
-    }
+    } catch (e) { console.warn('Supabase POST error:', e); return false; }
 }
 
 async function sbPatch(tabla, id, data) {
     try {
-        const res = await fetch(`${SUPABASE_URL}/${tabla}?id=eq.${id}`, {
-            method: 'PATCH',
-            headers,
-            body: JSON.stringify(data)
-        });
+        const res = await fetch(`${SUPABASE_URL}/${tabla}?id=eq.${id}`, { method: 'PATCH', headers: sbHeaders, body: JSON.stringify(data) });
         if (!res.ok) throw new Error(await res.text());
         return true;
-    } catch (e) {
-        console.error('Error PATCH ' + tabla + ':', e);
-        return false;
-    }
+    } catch (e) { console.warn('Supabase PATCH error:', e); return false; }
 }
 
 async function sbDelete(tabla, id) {
     try {
-        const res = await fetch(`${SUPABASE_URL}/${tabla}?id=eq.${id}`, {
-            method: 'DELETE',
-            headers
-        });
+        const res = await fetch(`${SUPABASE_URL}/${tabla}?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders });
         if (!res.ok) throw new Error(await res.text());
         return true;
-    } catch (e) {
-        console.error('Error DELETE ' + tabla + ':', e);
-        return false;
+    } catch (e) { console.warn('Supabase DELETE error:', e); return false; }
+}
+
+// Sincronizacion en segundo plano (no bloquea UI)
+async function sincronizarConSupabase() {
+    console.log('Sincronizando con Supabase...');
+    const [c, p, v] = await Promise.all([sbGet('clientes'), sbGet('productos'), sbGet('ventas')]);
+    let cambios = false;
+    if (c && c.length > 0) { clientes = c; cambios = true; }
+    if (p && p.length > 0) { productos = p; cambios = true; }
+    if (v && v.length > 0) { ventas = v; cambios = true; }
+    if (cambios) {
+        guardarLocal();
+        actualizarVistaCompleta();
+        console.log('Datos sincronizados desde Supabase');
     }
 }
 
 // =================================================================
 // INICIALIZACION
 // =================================================================
-
-async function inicializarApp() {
-    Swal.fire({ title: 'Sincronizando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    await sincronizarTodo();
+function inicializarApp() {
+    cargarLocal();
     vincularEventosUI();
     actualizarVistaCompleta();
-    Swal.close();
-}
-
-async function sincronizarTodo() {
-    const [c, p, v] = await Promise.all([sbGet('clientes'), sbGet('productos'), sbGet('ventas')]);
-    clientes = Array.isArray(c) ? c : [];
-    productos = Array.isArray(p) ? p : [];
-    ventas = Array.isArray(v) ? v : [];
+    // Intentar sincronizar con Supabase en segundo plano
+    sincronizarConSupabase().catch(e => console.warn('Fallo sincronizacion inicial:', e));
 }
 
 function esc(t) {
@@ -100,20 +105,25 @@ function esc(t) {
 // =================================================================
 // PRODUCTOS
 // =================================================================
-
 function renderizarProductos() {
     const cont = document.getElementById('listaProductos');
     if (!cont) return;
+    if (productos.length === 0) {
+        cont.innerHTML = '<div style="padding:40px;text-align:center;color:#94a3b8;"><i class="fas fa-box-open" style="font-size:3rem;margin-bottom:16px;display:block;"></i>No hay productos registrados</div>';
+        return;
+    }
     let html = '<table class="data-table"><thead><tr><th>ID</th><th>Repuesto</th><th>Precio</th><th>Stock</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>';
     productos.forEach(p => {
-        const bajo = (p.cantidad || 0) <= (p.stockmin || 5);
-        const clase = (p.cantidad || 0) <= 0 ? 'status-critical' : (bajo ? 'status-low' : 'status-ok');
-        const estado = (p.cantidad || 0) <= 0 ? 'Agotado' : (bajo ? 'Bajo' : 'OK');
+        const cant = parseInt(p.cantidad) || 0;
+        const min = parseInt(p.stockmin) || 5;
+        const bajo = cant <= min;
+        const clase = cant <= 0 ? 'status-critical' : (bajo ? 'status-low' : 'status-ok');
+        const estado = cant <= 0 ? 'Agotado' : (bajo ? 'Bajo' : 'OK');
         html += `<tr>
             <td>${p.id}</td>
             <td><strong>${esc(p.nombre)}</strong></td>
             <td>$${parseFloat(p.precio || 0).toFixed(2)}</td>
-            <td>${p.cantidad || 0}</td>
+            <td>${cant}</td>
             <td><span class="badge ${clase}">${estado}</span></td>
             <td class="acciones">
                 <button onclick="prepararEdicionProducto(${p.id})" class="btn-icon" title="Editar"><i class="fas fa-edit"></i></button>
@@ -140,16 +150,18 @@ async function guardarProducto(e) {
         return Swal.fire('Error', 'Datos incompletos o invalidos', 'error');
     }
 
-    // Si existe, actualizamos; si no, insertamos
-    const existe = productos.find(p => p.id == id);
-    const ok = existe ? await sbPatch('productos', id, data) : await sbPost('productos', data);
+    const idx = productos.findIndex(p => p.id == id);
+    if (idx >= 0) productos[idx] = data; else productos.push(data);
+    guardarLocal();
 
-    if (!ok) return Swal.fire('Error', 'No se pudo guardar en Supabase', 'error');
+    // Sync a Supabase en segundo plano
+    const existeEnSupabase = await sbGet('productos').then(list => (list || []).some(p => p.id == id));
+    if (existeEnSupabase) sbPatch('productos', id, data); else sbPost('productos', data);
 
     productoEditandoId = null;
     document.getElementById('formProducto').reset();
-    document.getElementById('btnSubmitProd').innerText = 'Guardar Producto';
-    await sincronizarTodo();
+    const btn = document.getElementById('btnSubmitProd');
+    if (btn) btn.innerText = 'Guardar Producto';
     actualizarVistaCompleta();
     Swal.fire('Exito', 'Producto guardado', 'success');
 }
@@ -165,10 +177,9 @@ async function eliminarProducto(id) {
     });
     if (!c.isConfirmed) return;
 
-    const ok = await sbDelete('productos', id);
-    if (!ok) return Swal.fire('Error', 'No se pudo eliminar', 'error');
-
-    await sincronizarTodo();
+    productos = productos.filter(p => p.id != id);
+    guardarLocal();
+    sbDelete('productos', id);
     actualizarVistaCompleta();
     Swal.fire('Eliminado', 'Producto eliminado', 'success');
 }
@@ -181,7 +192,8 @@ function prepararEdicionProducto(id) {
     document.getElementById('productoPrecio').value = p.precio || '';
     document.getElementById('productoCantidad').value = p.cantidad || '';
     document.getElementById('productoStockMin').value = p.stockmin || 5;
-    document.getElementById('btnSubmitProd').innerText = 'Actualizar Producto';
+    const btn = document.getElementById('btnSubmitProd');
+    if (btn) btn.innerText = 'Actualizar Producto';
     showTab('productos');
     document.getElementById('productoNombre').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -189,10 +201,13 @@ function prepararEdicionProducto(id) {
 // =================================================================
 // CLIENTES
 // =================================================================
-
 function renderizarClientes() {
     const cont = document.getElementById('listaClientes');
     if (!cont) return;
+    if (clientes.length === 0) {
+        cont.innerHTML = '<div style="padding:40px;text-align:center;color:#94a3b8;"><i class="fas fa-users" style="font-size:3rem;margin-bottom:16px;display:block;"></i>No hay clientes registrados</div>';
+        return;
+    }
     let html = '<table class="data-table"><thead><tr><th>ID</th><th>Nombre</th><th>Telefono</th><th>Direccion</th><th>Moto</th><th>Acciones</th></tr></thead><tbody>';
     clientes.forEach(c => {
         html += `<tr>
@@ -226,14 +241,14 @@ async function guardarCliente(e) {
         fecha: new Date().toLocaleDateString()
     };
 
-    const existe = clientes.find(c => c.id == id);
-    const ok = existe ? await sbPatch('clientes', id, data) : await sbPost('clientes', data);
+    const idx = clientes.findIndex(c => c.id == id);
+    if (idx >= 0) clientes[idx] = data; else clientes.push(data);
+    guardarLocal();
 
-    if (!ok) return Swal.fire('Error', 'No se pudo guardar en Supabase', 'error');
+    sbPost('clientes', data);
 
     clienteEditandoId = null;
     document.getElementById('formCliente').reset();
-    await sincronizarTodo();
     actualizarVistaCompleta();
     Swal.fire('Exito', 'Cliente guardado', 'success');
 }
@@ -249,10 +264,9 @@ async function eliminarCliente(id) {
     });
     if (!c.isConfirmed) return;
 
-    const ok = await sbDelete('clientes', id);
-    if (!ok) return Swal.fire('Error', 'No se pudo eliminar', 'error');
-
-    await sincronizarTodo();
+    clientes = clientes.filter(x => x.id != id);
+    guardarLocal();
+    sbDelete('clientes', id);
     actualizarVistaCompleta();
     Swal.fire('Eliminado', 'Cliente eliminado', 'success');
 }
@@ -271,10 +285,13 @@ function prepararEdicionCliente(id) {
 // =================================================================
 // VENTAS
 // =================================================================
-
 function renderizarVentas() {
     const cont = document.getElementById('listaVentas');
     if (!cont) return;
+    if (ventas.length === 0) {
+        cont.innerHTML = '<div style="padding:40px;text-align:center;color:#94a3b8;"><i class="fas fa-receipt" style="font-size:3rem;margin-bottom:16px;display:block;"></i>No hay ventas registradas</div>';
+        return;
+    }
     let html = '<table class="data-table"><thead><tr><th>ID</th><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cantidad</th><th>Total</th><th>Acciones</th></tr></thead><tbody>';
     ventas.forEach(v => {
         html += `<tr>
@@ -303,7 +320,9 @@ async function registrarVenta(e) {
     const cli = clientes.find(c => c.id == cId);
     const prod = productos.find(p => p.id == pId);
     if (!cli || !prod) return Swal.fire('Error', 'Cliente o producto no encontrado', 'error');
-    if (cant > (prod.cantidad || 0)) return Swal.fire('Atencion', 'Stock insuficiente: ' + (prod.cantidad || 0), 'warning');
+
+    const stockActual = parseInt(prod.cantidad) || 0;
+    if (cant > stockActual) return Swal.fire('Atencion', 'Stock insuficiente: ' + stockActual, 'warning');
 
     const venta = {
         id: Date.now(),
@@ -311,25 +330,6 @@ async function registrarVenta(e) {
         producto: prod.nombre,
         cantidad: cant,
         total: cant * parseFloat(prod.precio || 0),
-        fecha: new Date().toLocaleDateString()
-    };
-
-    const ok1 = await sbPost('ventas', venta);
-    const ok2 = await sbPatch('productos', prod.id, { cantidad: (prod.cantidad || 0) - cant });
-
-    if (!ok1 || !ok2) return Swal.fire('Error', 'No se pudo registrar la venta', 'error');
-
-    await sincronizarTodo();
-    actualizarVistaCompleta();
-    document.getElementById('formVenta').reset();
-    document.getElementById('ventaTotal').value = '$0.00';
-    Swal.fire('Venta Realizada', 'Total: $' + venta.total.toFixed(2), 'success');
-}
-
-async function eliminarVenta(id) {
-    const c = await Swal.fire({
-        title: 'Eliminar venta?',
-        text: 'No se puede deshacer',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Si, eliminar',
